@@ -1,4 +1,4 @@
-#include <string>
+#include <string_view>
 #include <iostream>
 #include <fstream>
 #include <map>
@@ -18,33 +18,69 @@
 
 #define THREADED 1
 
-// single threaded:    2.784s
-// multi threaded:     0.845s
-// best java solution: 0.163s
+// 10M
+//   single threaded:    2.784s
+//   multi threaded:     0.845s
+//   best java solution: 0.163s
+
+// 1B
+//   single threaded:    68.54s
+//   multi threaded:     14.991s
+//   best java solution:  3.096s
 
 struct StationSummary
 {
-    std::string name;
+    std::string_view name;
     int min = 1000;
     int max = -1000;
     int64_t sum = 0;
     int count = 0;
 
-    StationSummary(std::string name_) : name(std::move(name_)) {}
+    StationSummary(std::string_view name_) : name(name_) {}
+
+    inline void update(int temp)
+    {
+        count++;
+        sum += static_cast<int64_t>(temp);
+        if (temp > max)
+        {
+            max = temp;
+        }
+        if (temp < min)
+        {
+            min = temp;
+        }
+    }
+
+    inline void update(const StationSummary &other)
+    {
+        count += other.count;
+        sum += other.sum;
+        if (other.max > max)
+        {
+            max = other.max;
+        }
+        if (other.min < min)
+        {
+            min = other.min;
+        }
+    }
 };
 
-double custom_round(double value, int decimal_places)
+using StationContainer = std::unordered_map<std::string_view, StationSummary>;
+
+inline double custom_round(double value, int decimal_places)
 {
     const double multiplier = std::pow(10.0, decimal_places);
     return std::round(value * multiplier) / multiplier;
 }
 
-inline StationSummary &find_or_insert(std::unordered_map<std::string, StationSummary> &stations_map, const std::string &station)
+inline StationSummary &find_or_insert(StationContainer &stations_map, const std::string_view &station_name)
 {
-    auto itr = stations_map.find(station);
+    auto itr = stations_map.find(station_name);
     if (itr == stations_map.end())
     {
-        const auto insert_result = stations_map.emplace(std::make_pair(station, StationSummary(station)));
+        const auto insert_result = stations_map.emplace(std::make_pair(station_name, StationSummary(station_name)));
         if (!insert_result.second)
         {
             std::cerr << "failed to insert station into stations_map" << std::endl;
@@ -55,9 +91,9 @@ inline StationSummary &find_or_insert(std::unordered_map<std::string, StationSum
     return itr->second;
 }
 
-void print_result(std::array<std::unordered_map<std::string, StationSummary>, 8> &result)
+inline void print_result(std::array<StationContainer, 8> &result)
 {
-    std::map<std::string, StationSummary> ordered = {};
+    std::map<std::string_view, StationSummary> ordered = {};
     for (const auto &thread_result : result)
     {
         for (const auto &entry : thread_result)
@@ -69,16 +105,7 @@ void print_result(std::array<std::unordered_map<std::string, StationSummary>, 8>
                 continue;
             }
 
-            itr->second.count += entry.second.count;
-            itr->second.sum += entry.second.sum;
-            if (entry.second.max > itr->second.max)
-            {
-                itr->second.max = entry.second.max;
-            }
-            if (entry.second.min < itr->second.min)
-            {
-                itr->second.min = entry.second.min;
-            }
+            itr->second.update(entry.second);
         }
     }
 
@@ -98,7 +125,7 @@ struct Chunk
     size_t end;
 };
 
-void process_chunk(char *file_buffer, bool is_first_chunk, const Chunk &chunk, std::unordered_map<std::string, StationSummary> &result)
+inline void process_chunk(char *file_buffer, bool is_first_chunk, const Chunk &chunk, StationContainer &result)
 {
     char *current_pos = file_buffer + chunk.start;
     char *end_pos = file_buffer + chunk.end;
@@ -138,6 +165,7 @@ void process_chunk(char *file_buffer, bool is_first_chunk, const Chunk &chunk, s
             {
                 continue;
             }
+
             if (*current_pos == '-')
             {
                 is_negative = true;
@@ -152,20 +180,9 @@ void process_chunk(char *file_buffer, bool is_first_chunk, const Chunk &chunk, s
             temp *= -1;
         }
 
-        std::string station = std::string(start_of_line, station_name_length);
-
-        auto &station_summary = find_or_insert(result, station);
-
-        station_summary.count++;
-        station_summary.sum += static_cast<int64_t>(temp);
-        if (temp > station_summary.max)
-        {
-            station_summary.max = temp;
-        }
-        if (temp < station_summary.min)
-        {
-            station_summary.min = temp;
-        }
+        const auto station_name = std::string_view(start_of_line, station_name_length);
+        auto &station_summary = find_or_insert(result, station_name);
+        station_summary.update(temp);
 
         // skip line break
         current_pos++;
@@ -212,7 +229,7 @@ int main()
         return 1;
     }
 
-    std::array<std::unordered_map<std::string, StationSummary>, 8> result = {};
+    std::array<StationContainer, 8> result = {};
     std::array<std::thread, 8> threads = {};
     for (int i = 0; i < threads.size(); i++)
     {
