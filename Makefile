@@ -1,5 +1,8 @@
-run:
-	clang++ -O3 -g main.cpp && ./a.out
+build:
+	clang++ -O3 -g main.cpp
 
-perf:
-	clang++ main.cpp && perf record --call-graph dwarf ./a.out
+run: build
+	./a.out
+
+perf: build
+	perf record --call-graph dwarf ./a.out
