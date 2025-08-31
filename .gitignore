@@ -1,3 +1,6 @@
 perf.*
+solution_*
 a.out
-.vscode
+.vscode/
+.zig-cache/
+zig-out/
