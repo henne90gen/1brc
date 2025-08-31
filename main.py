@@ -11,7 +11,7 @@ class StationSummary:
 
 
 result = {}
-with open("../1brc/measurements.txt") as f:
+with open("/home/henne/Workspace/1brc/measurements.txt") as f:
     lines = f.readlines()
     for line in lines:
         parts = line.split(";")
@@ -30,4 +30,4 @@ with open("../1brc/measurements.txt") as f:
 for item in sorted(result.items(), key=lambda item: item[0]):
     summary: StationSummary = item[1]
     average = summary.temp_sum / summary.count
-    print(summary.name, f"{summary.minimum}/{average:.1f}/{summary.maximum} - {summary.temp_sum} - {summary.count}")
+    print(f"{summary.name}: {summary.minimum:.1f}/{average:.1f}/{summary.maximum:.1f}")
