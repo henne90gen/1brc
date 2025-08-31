@@ -84,10 +84,6 @@ pub fn main() !void {
         gpa = std.heap.page_allocator;
     }
 
-    var stations_arena = std.heap.ArenaAllocator.init(gpa);
-    defer stations_arena.deinit();
-    const stations_allocator = stations_arena.allocator();
-
     const file = try std.fs.openFileAbsolute("/home/henne/Workspace/1brc/measurements.txt", .{});
     defer file.close();
 
@@ -114,7 +110,7 @@ pub fn main() !void {
     var threads: [parallel_executions]std.Thread = undefined;
     var stations: [parallel_executions]std.StringHashMap(StationSummary) = undefined;
     for (0..parallel_executions) |idx| {
-        const station_map = std.StringHashMap(StationSummary).init(stations_allocator);
+        const station_map = std.StringHashMap(StationSummary).init(gpa);
         stations[idx] = station_map;
 
         const start_pos = chunk_size * idx;
@@ -142,8 +138,11 @@ pub fn main() !void {
         }
     }
 
-    var result_stations = std.StringHashMap(StationSummary).init(stations_allocator);
+    var result_stations = std.StringHashMap(StationSummary).init(gpa);
+    defer result_stations.deinit();
     for (0..parallel_executions) |idx| {
+        defer stations[idx].deinit();
+
         var itr = stations[idx].valueIterator();
         while (itr.next()) |value| {
             const result = try result_stations.getOrPut(value.*.name);
