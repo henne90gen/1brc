@@ -1,5 +1,5 @@
 build:
-	clang++ -O3 -g main.cpp
+	clang++ -std=c++20 -O3 -g main.cpp
 
 run: build
 	./a.out
