@@ -16,7 +16,7 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-#define MULTI_THREADED 0
+#define MULTI_THREADED 1
 #define USE_SMALL_DATASET 1
 
 // 10M
@@ -217,7 +217,7 @@ int main() {
 #endif
   }
 
-#if THREADED
+#if MULTI_THREADED
   for (auto &thread : threads) {
     thread.join();
   }
