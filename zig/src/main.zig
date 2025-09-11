@@ -22,6 +22,8 @@ pub const std_options: std.Options = .{
 const multi_threaded = true;
 const parallel_executions = 8;
 const use_debug_allocator = true;
+// const measurements_file_path = "/home/henne/Workspace/1brc/measurements.txt";
+const measurements_file_path = "/home/henne/Workspace/1brc/measurements-1B.txt";
 
 const StationSummary = struct {
     name: []const u8,
@@ -84,7 +86,7 @@ pub fn main() !void {
         gpa = std.heap.page_allocator;
     }
 
-    const file = try std.fs.openFileAbsolute("/home/henne/Workspace/1brc/measurements.txt", .{});
+    const file = try std.fs.openFileAbsolute(measurements_file_path, .{});
     defer file.close();
 
     try file.seekFromEnd(0);

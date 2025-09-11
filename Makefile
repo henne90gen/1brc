@@ -15,7 +15,7 @@ python-run:
 zig-build:
 	cd zig && zig build -Doptimize=ReleaseFast
 
-zig-run:
+zig-run: zig-build
 	cd zig && time ./zig-out/bin/_1brc_henne > ../solution_zig.txt
 
 zig-perf: zig-build

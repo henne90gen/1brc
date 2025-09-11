@@ -17,7 +17,10 @@
 #include <unistd.h>
 
 #define MULTI_THREADED 1
-#define USE_SMALL_DATASET 1
+// auto constexpr measurements_file_path =
+// "/home/henne/Workspace/1brc/measurements.txt";
+auto constexpr measurements_file_path =
+    "/home/henne/Workspace/1brc/measurements-1B.txt";
 
 // 10M
 //   single threaded:    2.784s
@@ -170,15 +173,9 @@ inline void process_chunk(char *file_buffer, const Chunk &chunk,
 }
 
 int main() {
-#if USE_SMALL_DATASET
-  std::string path = "/home/henne/Workspace/1brc/measurements.txt";
-#else
-  std::string path = "/home/henne/Workspace/1brc/measurements-1B.txt";
-#endif
-
-  std::ifstream f(path, std::ios::ate);
+  std::ifstream f(measurements_file_path, std::ios::ate);
   if (!f.is_open()) {
-    std::cerr << "failed to open file " << path << std::endl;
+    std::cerr << "failed to open file " << measurements_file_path << std::endl;
     return 1;
   }
 
@@ -191,9 +188,9 @@ int main() {
   }
   chunks[7].end = file_size_bytes;
 
-  auto fd = open(path.c_str(), O_RDONLY);
+  auto fd = open(measurements_file_path, O_RDONLY);
   if (fd == -1) {
-    std::cerr << "failed to open file " << path << std::endl;
+    std::cerr << "failed to open file " << measurements_file_path << std::endl;
     return 1;
   }
 
@@ -201,7 +198,7 @@ int main() {
       mmap(0, file_size_bytes, PROT_READ, MAP_SHARED, fd, 0));
   if (file_buffer == MAP_FAILED) {
     close(fd);
-    std::cerr << "failed to map file " << path << " into memory" << std::endl;
+    std::cerr << "failed to map file " << measurements_file_path << " into memory" << std::endl;
     return 1;
   }
 
