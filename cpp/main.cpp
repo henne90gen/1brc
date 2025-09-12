@@ -1,4 +1,3 @@
-#include <array>
 #include <cmath>
 #include <format>
 #include <fstream>
@@ -7,6 +6,7 @@
 #include <string_view>
 #include <thread>
 #include <unordered_map>
+#include <vector>
 
 #include <fcntl.h>
 #include <stdio.h>
@@ -18,7 +18,7 @@
 
 #define MULTI_THREADED 1
 // auto constexpr measurements_file_path =
-// "/home/henne/Workspace/1brc/measurements.txt";
+// "/home/henne/Workspace/1brc/measurements-100M.txt";
 auto constexpr measurements_file_path =
     "/home/henne/Workspace/1brc/measurements-1B.txt";
 
@@ -86,7 +86,7 @@ inline StationSummary &find_or_insert(StationContainer &stations_map,
   return itr->second;
 }
 
-inline void print_result(std::array<StationContainer, 8> &result) {
+inline void print_result(std::vector<StationContainer> &result) {
   std::map<std::string_view, StationSummary> ordered = {};
   for (const auto &thread_result : result) {
     for (const auto &entry : thread_result) {
@@ -179,14 +179,15 @@ int main() {
     return 1;
   }
 
+  auto const cpu_count = std::thread::hardware_concurrency();
   const auto file_size_bytes = f.tellg();
-  const auto chunk_size_bytes = file_size_bytes / 8;
-  std::array<Chunk, 8> chunks = {};
+  const auto chunk_size_bytes = file_size_bytes / cpu_count;
+  auto chunks = std::vector<Chunk>(cpu_count);
   for (int i = 0; i < chunks.size(); i++) {
     chunks[i].start = i * chunk_size_bytes;
     chunks[i].end = (i + 1) * chunk_size_bytes;
   }
-  chunks[7].end = file_size_bytes;
+  chunks[chunks.size() - 1].end = file_size_bytes;
 
   auto fd = open(measurements_file_path, O_RDONLY);
   if (fd == -1) {
@@ -198,12 +199,13 @@ int main() {
       mmap(0, file_size_bytes, PROT_READ, MAP_SHARED, fd, 0));
   if (file_buffer == MAP_FAILED) {
     close(fd);
-    std::cerr << "failed to map file " << measurements_file_path << " into memory" << std::endl;
+    std::cerr << "failed to map file " << measurements_file_path
+              << " into memory" << std::endl;
     return 1;
   }
 
-  std::array<StationContainer, 8> result = {};
-  std::array<std::thread, 8> threads = {};
+  auto result = std::vector<StationContainer>(cpu_count);
+  auto threads = std::vector<std::thread>(cpu_count);
   for (int i = 0; i < threads.size(); i++) {
 #if MULTI_THREADED
     threads[i] = std::thread([i, file_buffer, &chunks, &result]() {

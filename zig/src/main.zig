@@ -20,9 +20,8 @@ pub const std_options: std.Options = .{
 };
 
 const multi_threaded = true;
-const parallel_executions = 8;
 const use_debug_allocator = true;
-// const measurements_file_path = "/home/henne/Workspace/1brc/measurements.txt";
+// const measurements_file_path = "/home/henne/Workspace/1brc/measurements-100M.txt";
 const measurements_file_path = "/home/henne/Workspace/1brc/measurements-1B.txt";
 
 const StationSummary = struct {
@@ -108,9 +107,12 @@ pub fn main() !void {
 
     const buffer: [*]u8 = @ptrFromInt(mmap_result);
 
+    const parallel_executions = try std.Thread.getCpuCount();
     const chunk_size = @divFloor(total_file_size, parallel_executions);
-    var threads: [parallel_executions]std.Thread = undefined;
-    var stations: [parallel_executions]std.StringHashMap(StationSummary) = undefined;
+    var threads: []std.Thread = try gpa.alloc(std.Thread, parallel_executions);
+    defer gpa.free(threads);
+    var stations: []std.StringHashMap(StationSummary) = try gpa.alloc(std.StringHashMap(StationSummary), parallel_executions);
+    defer gpa.free(stations);
     for (0..parallel_executions) |idx| {
         const station_map = std.StringHashMap(StationSummary).init(gpa);
         stations[idx] = station_map;
