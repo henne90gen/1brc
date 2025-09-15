@@ -4,7 +4,7 @@ python-run:
 	cd python && time python main.py > ../solution_python.txt
 
 cpp-build:
-	cd cpp && clang++ -std=c++20 -O3 -ffast-math main.cpp
+	cd cpp && clang++ -std=c++20 -O3 -ffast-math -march=native main.cpp
 
 cpp-run: cpp-build
 	cd cpp && time ./a.out > ../solution_cpp.txt
@@ -13,7 +13,7 @@ cpp-perf: cpp-build
 	cd cpp && perf record --call-graph dwarf ./a.out
 
 zig-build:
-	cd zig && zig build -Doptimize=ReleaseFast
+	cd zig && zig build -Doptimize=ReleaseSafe
 
 zig-run: zig-build
 	cd zig && time ./zig-out/bin/_1brc_henne > ../solution_zig.txt
