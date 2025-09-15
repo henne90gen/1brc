@@ -20,7 +20,7 @@
 // auto constexpr measurements_file_path =
 // "/home/henne/Workspace/1brc/measurements-100M.txt";
 auto constexpr measurements_file_path =
-    "/home/henne/Workspace/1brc/measurements-1B.txt";
+    "/home/henne/Workspace/1brc/measurements-10M.txt";
 
 // 10M
 //   single threaded:    2.784s
@@ -100,15 +100,22 @@ inline void print_result(std::vector<StationContainer> &result) {
     }
   }
 
+  std::cout << "{";
+  bool is_first = true;
   for (const auto &entry : ordered) {
+    if (not is_first) {
+      std::cout << ", ";
+    } else {
+      is_first = false;
+    }
     const auto minimum = (double)entry.second.min / 10.0;
     const auto average = custom_round(
         (double)entry.second.sum / (double)entry.second.count / 10.0, 1);
     const auto maximum = (double)entry.second.max / 10.0;
-    std::cout << std::format("{}: {:.1f}/{:.1f}/{:.1f}", entry.first, minimum,
-                             average, maximum)
-              << std::endl;
+    std::cout << std::format("{}={:.1f}/{:.1f}/{:.1f}", entry.first, minimum,
+                             average, maximum);
   }
+  std::cout << "}" << std::endl;
 }
 
 struct Chunk {

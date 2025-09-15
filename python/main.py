@@ -11,7 +11,7 @@ class StationSummary:
 
 
 result = {}
-with open("/home/henne/Workspace/1brc/measurements.txt") as f:
+with open("/home/henne/Workspace/1brc/measurements-10M.txt") as f:
     lines = f.readlines()
     for line in lines:
         parts = line.split(";")
@@ -27,7 +27,17 @@ with open("/home/henne/Workspace/1brc/measurements.txt") as f:
         result[station_name].count += 1
 
 
+final_str = "{"
+is_first = True
 for item in sorted(result.items(), key=lambda item: item[0]):
+    if not is_first:
+        final_str += ", "
+    else:
+        is_first = False
+
     summary: StationSummary = item[1]
     average = summary.temp_sum / summary.count
-    print(f"{summary.name}: {summary.minimum:.1f}/{average:.1f}/{summary.maximum:.1f}")
+    final_str += f"{summary.name}={summary.minimum:.1f}/{average:.1f}/{summary.maximum:.1f}"
+final_str += "}"
+
+print(final_str)

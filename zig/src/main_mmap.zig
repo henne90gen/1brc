@@ -9,7 +9,7 @@ pub fn logFn(
     const stdout = std.io.getStdOut().writer();
     std.fmt.format(
         stdout,
-        format ++ "\n",
+        format,
         args,
     ) catch {};
 }
@@ -21,8 +21,8 @@ pub const std_options: std.Options = .{
 
 const multi_threaded = true;
 const use_debug_allocator = true;
-const measurements_file_path = "/home/henne/Workspace/1brc/measurements-100M.txt";
-// const measurements_file_path = "/home/henne/Workspace/1brc/measurements-1B.txt";
+// const measurements_file_path = "/home/henne/Workspace/1brc/measurements-100M.txt";
+const measurements_file_path = "/home/henne/Workspace/1brc/measurements-10M.txt";
 
 const StationSummary = struct {
     name: []const u8,
@@ -239,11 +239,20 @@ fn print_results(gpa: std.mem.Allocator, stations: *std.StringHashMap(StationSum
 
     std.sort.block([]const u8, keys.items, {}, compareStrings);
 
+    std.log.info("{{", .{});
+    var is_first = true;
     for (keys.items) |key| {
+        if (!is_first) {
+            std.log.info(", ", .{});
+        } else {
+            is_first = false;
+        }
+
         const value = stations.getPtr(key).?;
         const min_f: f32 = @floatFromInt(value.*.min);
         const average = value.*.average_temp();
         const max_f: f32 = @floatFromInt(value.*.max);
-        std.log.info("{s}: {d:.1}/{d:.1}/{d:.1}", .{ value.*.name, min_f / 10.0, average, max_f / 10.0 });
+        std.log.info("{s}={d:.1}/{d:.1}/{d:.1}", .{ value.*.name, min_f / 10.0, average, max_f / 10.0 });
     }
+    std.log.info("}}\n", .{});
 }

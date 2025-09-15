@@ -1,6 +1,6 @@
 perf.*
 solution_*
-a.out
+cpp/brc
 .vscode/
 .zig-cache/
 zig-out/
