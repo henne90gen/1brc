@@ -1,22 +1,5 @@
 const std = @import("std");
 
-pub fn logFn(
-    comptime _: std.log.Level,
-    comptime _: @TypeOf(.enum_literal),
-    comptime format: []const u8,
-    args: anytype,
-) void {
-    var buffer = [_]u8{0} ** 4096;
-    var stdout = std.fs.File.stdout().writer(&buffer);
-    stdout.interface.print(format, args) catch {};
-    stdout.interface.flush() catch {};
-}
-
-pub const std_options: std.Options = .{
-    .log_level = .info,
-    .logFn = logFn,
-};
-
 const use_debug_allocator = true;
 // const measurements_file_path = "/home/henne/Workspace/1brc/measurements-100M.txt";
 const measurements_file_path = "/home/henne/Workspace/1brc/measurements-10M.txt";
@@ -250,22 +233,36 @@ fn compareStrings(_: void, lhs: []const u8, rhs: []const u8) bool {
 
 fn print_results(gpa: std.mem.Allocator, stations: *std.StringHashMap(StationSummary)) !void {
     var keys = try std.ArrayList([]const u8).initCapacity(gpa, stations.count());
-    defer keys.deinit();
+    defer keys.deinit(gpa);
 
     var itr = stations.iterator();
     while (itr.next()) |entry| {
-        try keys.append(entry.key_ptr.*);
+        try keys.append(gpa, entry.key_ptr.*);
     }
 
     std.sort.block([]const u8, keys.items, {}, compareStrings);
 
+    var buffer = [_]u8{0} ** (1024 * 1024);
+    var stdout = std.fs.File.stdout().writer(&buffer);
+    defer stdout.interface.flush() catch {};
+
+    try stdout.interface.print("{{", .{});
+    var is_first = true;
     for (keys.items) |key| {
+        if (!is_first) {
+            try stdout.interface.print(", ", .{});
+        } else {
+            is_first = false;
+        }
+
         const value = stations.getPtr(key).?;
         const min_f: f32 = @floatFromInt(value.*.min);
         const average = value.*.average_temp();
         const max_f: f32 = @floatFromInt(value.*.max);
-        std.log.info("{s}: {d:.1}/{d:.1}/{d:.1}", .{ value.*.name, min_f / 10.0, average, max_f / 10.0 });
+        try stdout.interface.print("{s}={d:.1}/{d:.1}/{d:.1}", .{ value.*.name, min_f / 10.0, average, max_f / 10.0 });
     }
+
+    try stdout.interface.print("}}\n", .{});
 }
 
 // read chunks of data (~256MB)
