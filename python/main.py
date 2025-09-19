@@ -6,11 +6,11 @@ class StationSummary:
     name: str
     minimum: float
     maximum: float
-    temp_sum: int
+    temp_sum: float
     count: int
 
 
-result = {}
+result: dict[str, StationSummary] = {}
 with open("/home/henne/Workspace/1brc/measurements-10M.txt") as f:
     lines = f.readlines()
     for line in lines:

@@ -20,7 +20,7 @@
 // auto constexpr measurements_file_path =
 // "/home/henne/Workspace/1brc/measurements-100M.txt";
 auto constexpr measurements_file_path =
-    "/home/henne/Workspace/1brc/measurements-10M.txt";
+    "/home/henne/Workspace/1brc/measurements-1B.txt";
 
 // 10M
 //   single threaded:    2.784s

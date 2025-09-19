@@ -6,12 +6,9 @@ pub fn logFn(
     comptime format: []const u8,
     args: anytype,
 ) void {
-    const stdout = std.io.getStdOut().writer();
-    std.fmt.format(
-        stdout,
-        format,
-        args,
-    ) catch {};
+    var buffer = [_]u8{0} ** 1024;
+    var stdout = std.fs.File.stdout().writer(&buffer);
+    stdout.interface.print(format, args) catch {};
 }
 
 pub const std_options: std.Options = .{
@@ -22,7 +19,7 @@ pub const std_options: std.Options = .{
 const multi_threaded = true;
 const use_debug_allocator = true;
 // const measurements_file_path = "/home/henne/Workspace/1brc/measurements-100M.txt";
-const measurements_file_path = "/home/henne/Workspace/1brc/measurements-10M.txt";
+const measurements_file_path = "/home/henne/Workspace/1brc/measurements-1B.txt";
 
 const StationSummary = struct {
     name: []const u8,
@@ -126,13 +123,14 @@ pub fn main() !void {
         if (comptime multi_threaded) {
             const thread = try std.Thread.spawn(.{}, process_chunk, .{
                 buffer,
+                total_file_size,
                 start_pos,
                 end_pos,
                 &stations[idx],
             });
             threads[idx] = thread;
         } else {
-            try process_chunk(buffer, start_pos, end_pos, &stations[idx]);
+            try process_chunk(buffer, total_file_size, start_pos, end_pos, &stations[idx]);
         }
     }
 
@@ -160,7 +158,7 @@ pub fn main() !void {
     try print_results(gpa, &result_stations);
 }
 
-fn process_chunk(buffer: [*]u8, start_pos: usize, end_pos: usize, stations: *std.StringHashMap(StationSummary)) !void {
+fn process_chunk(buffer: [*]u8, buffer_size: usize, start_pos: usize, end_pos: usize, stations: *std.StringHashMap(StationSummary)) !void {
     var current_pos: usize = start_pos;
 
     if (start_pos != 0) {
@@ -176,9 +174,9 @@ fn process_chunk(buffer: [*]u8, start_pos: usize, end_pos: usize, stations: *std
     var is_negative: bool = false;
     var station_name_length: usize = 0;
     var start_of_line: usize = current_pos;
-    while (current_pos < end_pos) {
+    while (current_pos < buffer_size) {
         current_pos += 1;
-        if (current_pos >= end_pos) {
+        if (current_pos >= buffer_size) {
             break;
         }
 
@@ -198,6 +196,10 @@ fn process_chunk(buffer: [*]u8, start_pos: usize, end_pos: usize, stations: *std
             is_negative = false;
             station_name_length = 0;
             start_of_line = current_pos + 1;
+
+            if (current_pos >= end_pos) {
+                break;
+            }
             continue;
         }
 
@@ -230,11 +232,11 @@ fn compareStrings(_: void, lhs: []const u8, rhs: []const u8) bool {
 
 fn print_results(gpa: std.mem.Allocator, stations: *std.StringHashMap(StationSummary)) !void {
     var keys = try std.ArrayList([]const u8).initCapacity(gpa, stations.count());
-    defer keys.deinit();
+    defer keys.deinit(gpa);
 
     var itr = stations.iterator();
     while (itr.next()) |entry| {
-        try keys.append(entry.key_ptr.*);
+        try keys.append(gpa, entry.key_ptr.*);
     }
 
     std.sort.block([]const u8, keys.items, {}, compareStrings);
