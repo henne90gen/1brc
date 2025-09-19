@@ -15,8 +15,11 @@ cpp-perf: cpp-build
 zig-build:
 	cd zig && zig build -Doptimize=ReleaseFast
 
-zig-run: zig-build
+zig-run-mmap: zig-build
 	cd zig && time ./zig-out/bin/brc_mmap > ../solution_zig.txt
+
+zig-run: zig-build
+	cd zig && time ./zig-out/bin/brc > ../solution_zig.txt
 
 zig-perf: zig-build
 	cd zig && perf record --call-graph dwarf ./zig-out/bin/brc_mmap
