@@ -1,9 +1,11 @@
 const std = @import("std");
+const builtin = @import("builtin");
 
 const multi_threaded = true;
 const use_debug_allocator = true;
 // const measurements_file_path = "/home/henne/Workspace/1brc/measurements-10M.txt";
-const measurements_file_path = "/home/henne/Workspace/1brc/measurements-1B.txt";
+// const measurements_file_path = "/home/henne/Workspace/1brc/measurements-1B.txt";
+const measurements_file_path = "D:\\Workspace\\1brc\\measurements-1B.txt";
 
 const StationSummary = struct {
     name: []const u8,
@@ -45,6 +47,59 @@ const StationSummary = struct {
     }
 };
 
+fn mmap_file(file: std.fs.File, total_file_size: usize) ![*]u8 {
+    if (builtin.os.tag == .linux) {
+        const mmap_result = std.os.linux.mmap(
+            null,
+            @intCast(total_file_size),
+            1,
+            .{ .TYPE = std.os.linux.MAP_TYPE.SHARED },
+            file.handle,
+            0,
+        );
+        if (mmap_result == -1) {
+            std.debug.print("Failed to mmap file\n", .{});
+            return error.MmapFailed;
+        }
+
+        return @ptrFromInt(mmap_result);
+    } else if (builtin.os.tag == .windows) {
+        const windows = @import("windows.zig");
+        const mapping = windows.CreateFileMapping( //
+            file.handle, // hFile
+            null, // Mapping attributes
+            windows.PAGE_READONLY, // Protection flags
+            0, // MaximumSizeHigh
+            0, // MaximumSizeLow
+            null // Name
+        );
+        if (mapping == null) {
+            std.debug.print("CreateFileMapping failed with error {d}\n", .{std.os.windows.GetLastError()});
+            return error.MmapFailed;
+        }
+
+        const ptr = windows.MapViewOfFile(
+            mapping, // hFileMappingObject
+            windows.FILE_MAP_READ, // dwDesiredAccess
+            0, // dwFileOffsetHigh
+            0, // dwFileOffsetLow
+            0, // dwNumberOfBytesToMap
+        );
+        if (ptr == null) {
+            std.debug.print("MapViewOfFile failed with error {d}\n", .{std.os.windows.GetLastError()});
+            std.os.windows.CloseHandle(mapping.?);
+            return error.MmapFailed;
+        }
+
+        return @ptrCast(ptr);
+    } else {
+        std.debug.print("Memory mapping is only implemented for Linux\n", .{});
+        return error.UnsupportedOS;
+    }
+
+    return error.MmapFailed;
+}
+
 pub fn main() !void {
     var debug_allocator = std.heap.DebugAllocator(.{}).init;
     defer {
@@ -73,20 +128,7 @@ pub fn main() !void {
     const total_file_size = try file.getPos();
     try file.seekTo(0);
 
-    const mmap_result = std.os.linux.mmap(
-        null,
-        @intCast(total_file_size),
-        1,
-        .{ .TYPE = std.os.linux.MAP_TYPE.SHARED },
-        file.handle,
-        0,
-    );
-    if (mmap_result == -1) {
-        std.debug.print("Failed to mmap file\n", .{});
-        return error.MmapFailed;
-    }
-
-    const buffer: [*]u8 = @ptrFromInt(mmap_result);
+    const buffer: [*]u8 = try mmap_file(file, total_file_size);
 
     const parallel_executions = try std.Thread.getCpuCount();
     const chunk_size = @divFloor(total_file_size, parallel_executions);

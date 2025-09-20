@@ -1,0 +1,179 @@
+pub const HANDLE = @import("std").os.windows.HANDLE;
+pub const BOOL = i32;
+
+pub const SECURITY_ATTRIBUTES = extern struct {
+    nLength: u32,
+    lpSecurityDescriptor: ?*anyopaque,
+    bInheritHandle: BOOL,
+};
+
+pub const PAGE_PROTECTION_FLAGS = packed struct(u32) {
+    PAGE_NOACCESS: u1 = 0,
+    PAGE_READONLY: u1 = 0,
+    PAGE_READWRITE: u1 = 0,
+    PAGE_WRITECOPY: u1 = 0,
+    PAGE_EXECUTE: u1 = 0,
+    PAGE_EXECUTE_READ: u1 = 0,
+    PAGE_EXECUTE_READWRITE: u1 = 0,
+    PAGE_EXECUTE_WRITECOPY: u1 = 0,
+    PAGE_GUARD: u1 = 0,
+    PAGE_NOCACHE: u1 = 0,
+    PAGE_WRITECOMBINE: u1 = 0,
+    PAGE_GRAPHICS_NOACCESS: u1 = 0,
+    PAGE_GRAPHICS_READONLY: u1 = 0,
+    PAGE_GRAPHICS_READWRITE: u1 = 0,
+    PAGE_GRAPHICS_EXECUTE: u1 = 0,
+    PAGE_GRAPHICS_EXECUTE_READ: u1 = 0,
+    PAGE_GRAPHICS_EXECUTE_READWRITE: u1 = 0,
+    PAGE_GRAPHICS_COHERENT: u1 = 0,
+    PAGE_GRAPHICS_NOCACHE: u1 = 0,
+    SEC_64K_PAGES: u1 = 0,
+    _20: u1 = 0,
+    _21: u1 = 0,
+    _22: u1 = 0,
+    SEC_FILE: u1 = 0,
+    SEC_IMAGE: u1 = 0,
+    SEC_PROTECTED_IMAGE: u1 = 0,
+    SEC_RESERVE: u1 = 0,
+    SEC_COMMIT: u1 = 0,
+    PAGE_ENCLAVE_MASK: u1 = 0,
+    PAGE_ENCLAVE_UNVALIDATED: u1 = 0,
+    PAGE_TARGETS_NO_UPDATE: u1 = 0,
+    PAGE_ENCLAVE_THREAD_CONTROL: u1 = 0,
+    // PAGE_REVERT_TO_FILE_MAP (bit index 31) conflicts with PAGE_ENCLAVE_THREAD_CONTROL
+    // PAGE_TARGETS_INVALID (bit index 30) conflicts with PAGE_TARGETS_NO_UPDATE
+    // PAGE_ENCLAVE_DECOMMIT (bit index 28) conflicts with PAGE_ENCLAVE_MASK
+    // SEC_PARTITION_OWNER_HANDLE (bit index 18) conflicts with PAGE_GRAPHICS_NOCACHE
+    // SEC_NOCACHE (bit index 28) conflicts with PAGE_ENCLAVE_MASK
+    // SEC_WRITECOMBINE (bit index 30) conflicts with PAGE_TARGETS_NO_UPDATE
+    // SEC_LARGE_PAGES (bit index 31) conflicts with PAGE_ENCLAVE_THREAD_CONTROL
+};
+pub const PAGE_NOACCESS = PAGE_PROTECTION_FLAGS{ .PAGE_NOACCESS = 1 };
+pub const PAGE_READONLY = PAGE_PROTECTION_FLAGS{ .PAGE_READONLY = 1 };
+pub const PAGE_READWRITE = PAGE_PROTECTION_FLAGS{ .PAGE_READWRITE = 1 };
+pub const PAGE_WRITECOPY = PAGE_PROTECTION_FLAGS{ .PAGE_WRITECOPY = 1 };
+pub const PAGE_EXECUTE = PAGE_PROTECTION_FLAGS{ .PAGE_EXECUTE = 1 };
+pub const PAGE_EXECUTE_READ = PAGE_PROTECTION_FLAGS{ .PAGE_EXECUTE_READ = 1 };
+pub const PAGE_EXECUTE_READWRITE = PAGE_PROTECTION_FLAGS{ .PAGE_EXECUTE_READWRITE = 1 };
+pub const PAGE_EXECUTE_WRITECOPY = PAGE_PROTECTION_FLAGS{ .PAGE_EXECUTE_WRITECOPY = 1 };
+pub const PAGE_GUARD = PAGE_PROTECTION_FLAGS{ .PAGE_GUARD = 1 };
+pub const PAGE_NOCACHE = PAGE_PROTECTION_FLAGS{ .PAGE_NOCACHE = 1 };
+pub const PAGE_WRITECOMBINE = PAGE_PROTECTION_FLAGS{ .PAGE_WRITECOMBINE = 1 };
+pub const PAGE_GRAPHICS_NOACCESS = PAGE_PROTECTION_FLAGS{ .PAGE_GRAPHICS_NOACCESS = 1 };
+pub const PAGE_GRAPHICS_READONLY = PAGE_PROTECTION_FLAGS{ .PAGE_GRAPHICS_READONLY = 1 };
+pub const PAGE_GRAPHICS_READWRITE = PAGE_PROTECTION_FLAGS{ .PAGE_GRAPHICS_READWRITE = 1 };
+pub const PAGE_GRAPHICS_EXECUTE = PAGE_PROTECTION_FLAGS{ .PAGE_GRAPHICS_EXECUTE = 1 };
+pub const PAGE_GRAPHICS_EXECUTE_READ = PAGE_PROTECTION_FLAGS{ .PAGE_GRAPHICS_EXECUTE_READ = 1 };
+pub const PAGE_GRAPHICS_EXECUTE_READWRITE = PAGE_PROTECTION_FLAGS{ .PAGE_GRAPHICS_EXECUTE_READWRITE = 1 };
+pub const PAGE_GRAPHICS_COHERENT = PAGE_PROTECTION_FLAGS{ .PAGE_GRAPHICS_COHERENT = 1 };
+pub const PAGE_GRAPHICS_NOCACHE = PAGE_PROTECTION_FLAGS{ .PAGE_GRAPHICS_NOCACHE = 1 };
+pub const PAGE_ENCLAVE_THREAD_CONTROL = PAGE_PROTECTION_FLAGS{ .PAGE_ENCLAVE_THREAD_CONTROL = 1 };
+pub const PAGE_REVERT_TO_FILE_MAP = PAGE_PROTECTION_FLAGS{ .PAGE_ENCLAVE_THREAD_CONTROL = 1 };
+pub const PAGE_TARGETS_NO_UPDATE = PAGE_PROTECTION_FLAGS{ .PAGE_TARGETS_NO_UPDATE = 1 };
+pub const PAGE_TARGETS_INVALID = PAGE_PROTECTION_FLAGS{ .PAGE_TARGETS_NO_UPDATE = 1 };
+pub const PAGE_ENCLAVE_UNVALIDATED = PAGE_PROTECTION_FLAGS{ .PAGE_ENCLAVE_UNVALIDATED = 1 };
+pub const PAGE_ENCLAVE_MASK = PAGE_PROTECTION_FLAGS{ .PAGE_ENCLAVE_MASK = 1 };
+pub const PAGE_ENCLAVE_DECOMMIT = PAGE_PROTECTION_FLAGS{ .PAGE_ENCLAVE_MASK = 1 };
+pub const PAGE_ENCLAVE_SS_FIRST = PAGE_PROTECTION_FLAGS{
+    .PAGE_NOACCESS = 1,
+    .PAGE_ENCLAVE_MASK = 1,
+};
+pub const PAGE_ENCLAVE_SS_REST = PAGE_PROTECTION_FLAGS{
+    .PAGE_READONLY = 1,
+    .PAGE_ENCLAVE_MASK = 1,
+};
+pub const SEC_PARTITION_OWNER_HANDLE = PAGE_PROTECTION_FLAGS{ .PAGE_GRAPHICS_NOCACHE = 1 };
+pub const SEC_64K_PAGES = PAGE_PROTECTION_FLAGS{ .SEC_64K_PAGES = 1 };
+pub const SEC_FILE = PAGE_PROTECTION_FLAGS{ .SEC_FILE = 1 };
+pub const SEC_IMAGE = PAGE_PROTECTION_FLAGS{ .SEC_IMAGE = 1 };
+pub const SEC_PROTECTED_IMAGE = PAGE_PROTECTION_FLAGS{ .SEC_PROTECTED_IMAGE = 1 };
+pub const SEC_RESERVE = PAGE_PROTECTION_FLAGS{ .SEC_RESERVE = 1 };
+pub const SEC_COMMIT = PAGE_PROTECTION_FLAGS{ .SEC_COMMIT = 1 };
+pub const SEC_NOCACHE = PAGE_PROTECTION_FLAGS{ .PAGE_ENCLAVE_MASK = 1 };
+pub const SEC_WRITECOMBINE = PAGE_PROTECTION_FLAGS{ .PAGE_TARGETS_NO_UPDATE = 1 };
+pub const SEC_LARGE_PAGES = PAGE_PROTECTION_FLAGS{ .PAGE_ENCLAVE_THREAD_CONTROL = 1 };
+pub const SEC_IMAGE_NO_EXECUTE = PAGE_PROTECTION_FLAGS{
+    .SEC_IMAGE = 1,
+    .PAGE_ENCLAVE_MASK = 1,
+};
+
+pub const FILE_MAP = packed struct(u32) {
+    COPY: u1 = 0,
+    WRITE: u1 = 0,
+    READ: u1 = 0,
+    _3: u1 = 0,
+    _4: u1 = 0,
+    EXECUTE: u1 = 0,
+    _6: u1 = 0,
+    _7: u1 = 0,
+    _8: u1 = 0,
+    _9: u1 = 0,
+    _10: u1 = 0,
+    _11: u1 = 0,
+    _12: u1 = 0,
+    _13: u1 = 0,
+    _14: u1 = 0,
+    _15: u1 = 0,
+    _16: u1 = 0,
+    _17: u1 = 0,
+    _18: u1 = 0,
+    _19: u1 = 0,
+    _20: u1 = 0,
+    _21: u1 = 0,
+    _22: u1 = 0,
+    _23: u1 = 0,
+    _24: u1 = 0,
+    _25: u1 = 0,
+    _26: u1 = 0,
+    _27: u1 = 0,
+    _28: u1 = 0,
+    LARGE_PAGES: u1 = 0,
+    TARGETS_INVALID: u1 = 0,
+    RESERVE: u1 = 0,
+};
+pub const FILE_MAP_WRITE = FILE_MAP{ .WRITE = 1 };
+pub const FILE_MAP_READ = FILE_MAP{ .READ = 1 };
+pub const FILE_MAP_ALL_ACCESS = FILE_MAP{
+    .COPY = 1,
+    .WRITE = 1,
+    .READ = 1,
+    ._3 = 1,
+    ._4 = 1,
+    ._16 = 1,
+    ._17 = 1,
+    ._18 = 1,
+    ._19 = 1,
+};
+pub const FILE_MAP_EXECUTE = FILE_MAP{ .EXECUTE = 1 };
+pub const FILE_MAP_COPY = FILE_MAP{ .COPY = 1 };
+pub const FILE_MAP_RESERVE = FILE_MAP{ .RESERVE = 1 };
+pub const FILE_MAP_TARGETS_INVALID = FILE_MAP{ .TARGETS_INVALID = 1 };
+pub const FILE_MAP_LARGE_PAGES = FILE_MAP{ .LARGE_PAGES = 1 };
+
+pub extern "kernel32" fn CreateFileMappingA(
+    hFile: ?HANDLE,
+    lpFileMappingAttributes: ?*SECURITY_ATTRIBUTES,
+    flProtect: PAGE_PROTECTION_FLAGS,
+    dwMaximumSizeHigh: u32,
+    dwMaximumSizeLow: u32,
+    lpName: ?[*:0]const u8,
+) callconv(.winapi) ?HANDLE;
+
+pub extern "kernel32" fn CreateFileMappingW(
+    hFile: ?HANDLE,
+    lpFileMappingAttributes: ?*SECURITY_ATTRIBUTES,
+    flProtect: PAGE_PROTECTION_FLAGS,
+    dwMaximumSizeHigh: u32,
+    dwMaximumSizeLow: u32,
+    lpName: ?[*:0]const u16,
+) callconv(.winapi) ?HANDLE;
+
+pub const CreateFileMapping = @This().CreateFileMappingA;
+
+pub extern "kernel32" fn MapViewOfFile(
+    hFileMappingObject: ?HANDLE,
+    dwDesiredAccess: FILE_MAP,
+    dwFileOffsetHigh: u32,
+    dwFileOffsetLow: u32,
+    dwNumberOfBytesToMap: usize,
+) callconv(.winapi) ?*anyopaque;
