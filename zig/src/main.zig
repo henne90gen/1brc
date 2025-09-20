@@ -1,18 +1,21 @@
 const std = @import("std");
 
+const multi_threaded = true;
 const use_debug_allocator = true;
 // const measurements_file_path = "/home/henne/Workspace/1brc/measurements-100M.txt";
-const measurements_file_path = "/home/henne/Workspace/1brc/measurements-10M.txt";
+// const measurements_file_path = "/home/henne/Workspace/1brc/measurements-10M.txt";
+const measurements_file_path = "D:\\Workspace\\1brc\\measurements-1B.txt";
 
 const StationSummary = struct {
-    name: []const u8,
+    name: [100]u8,
     min: i32 = 1000,
     max: i32 = -1000,
     sum: i64 = 0,
     count: i32 = 0,
 
     pub fn init(name_: []const u8) StationSummary {
-        return StationSummary{ .name = name_ };
+        var result = StationSummary{ .name = undefined };
+        return result;
     }
 
     pub fn update_temp(self: *StationSummary, temp: i32) void {
@@ -45,29 +48,31 @@ const StationSummary = struct {
 };
 
 const Worker = struct {
-    gpa: std.mem.Allocator,
     thread: std.Thread,
     buffer: []u8,
     buffer_size: usize,
+    buffer_capacity: usize,
     stations: std.StringHashMap(StationSummary) = undefined,
+    stations_keys: std.ArrayList([]const u8) = undefined,
 
     processing: std.atomic.Value(bool) = std.atomic.Value(bool).init(false),
     done: std.atomic.Value(bool) = std.atomic.Value(bool).init(false),
 
-    pub fn init(gpa_: std.mem.Allocator) !*Worker {
-        const buffer_size = 256 * 1024 * 1024;
-        var result = try gpa_.create(Worker);
-        result.gpa = gpa_;
-        result.buffer_size = buffer_size;
-        result.buffer = try gpa_.alloc(u8, buffer_size);
-        result.stations = std.StringHashMap(StationSummary).init(gpa_);
+    pub fn init(gpa: std.mem.Allocator) !*Worker {
+        const buffer_capacity = 256 * 1024 * 1024;
+        var result = try gpa.create(Worker);
+        result.buffer_capacity = buffer_capacity;
+        result.buffer = try gpa.alloc(u8, buffer_capacity);
+        result.stations = std.StringHashMap(StationSummary).init(gpa);
+        result.stations_keys = std.ArrayList([]const u8).init(gpa);
         result.thread = try std.Thread.spawn(.{}, Worker.run, .{result});
         return result;
     }
 
-    pub fn deinit(self: Worker) void {
-        self.gpa_.free(self.buffer);
+    pub fn deinit(self: *Worker, gpa: std.mem.Allocator) void {
+        gpa.free(self.buffer);
         self.stations.deinit();
+        gpa.destroy(self);
     }
 
     pub fn run(self: *Worker) void {
@@ -77,6 +82,7 @@ const Worker = struct {
             }
 
             process_chunk(self.buffer, self.buffer_size, &self.stations) catch {};
+
             self.processing.store(false, .monotonic);
         }
     }
@@ -106,13 +112,15 @@ pub fn main() !void {
     const file = try std.fs.openFileAbsolute(measurements_file_path, .{});
     defer file.close();
 
-    const parallel_executions = try std.Thread.getCpuCount();
+    const parallel_executions = if (multi_threaded) try std.Thread.getCpuCount() else 1;
     const workers: []*Worker = try gpa.alloc(*Worker, parallel_executions);
     defer gpa.free(workers);
 
     for (workers) |*worker| {
         worker.* = try Worker.init(gpa);
     }
+
+    std.debug.print("created workers\n", .{});
 
     var copy_from_previous: usize = 0;
     var previous_buffer: []u8 = undefined;
@@ -128,14 +136,26 @@ pub fn main() !void {
             }
         }
 
+        std.debug.print("selected worker, dispatching work\n", .{});
+
         if (copy_from_previous != 0) {
+            std.debug.print("copying work from previous buffer: {}\n", .{copy_from_previous});
             std.mem.copyForwards(u8, selected_worker.?.buffer, previous_buffer[previous_buffer_size - copy_from_previous .. previous_buffer_size]);
         }
 
+        const expected_bytes_read = selected_worker.?.buffer_capacity - copy_from_previous;
         const bytes_read = try file.read(selected_worker.?.buffer[copy_from_previous..]);
-        if (bytes_read != selected_worker.?.buffer_size + copy_from_previous) {
-            return;
+        if (bytes_read != expected_bytes_read) {
+            std.debug.print("did not read the expected amount of bytes: {} vs {}\n", .{ bytes_read, expected_bytes_read });
+            for (workers) |worker| {
+                worker.done.store(true, .monotonic);
+            }
+            break;
         }
+
+        selected_worker.?.buffer_size = bytes_read + copy_from_previous;
+
+        std.debug.print("starting selected worker: from_previous={}, bytes_read={}, buffer_size={}, buffer_capacity={}\n", .{ copy_from_previous, bytes_read, selected_worker.?.buffer_size, selected_worker.?.buffer_capacity });
 
         selected_worker.?.processing.store(true, .monotonic);
 
@@ -158,22 +178,24 @@ pub fn main() !void {
     var result_stations = std.StringHashMap(StationSummary).init(gpa);
     defer result_stations.deinit();
     for (workers) |worker| {
-        defer worker.deinit();
-
         var itr = worker.stations.valueIterator();
         while (itr.next()) |value| {
-            const result = try result_stations.getOrPut(value.*.name);
+            const result = try result_stations.getOrPut(&value.*.name);
             if (!result.found_existing) {
-                result.value_ptr.* = StationSummary.init(value.*.name);
+                result.value_ptr.* = StationSummary.init(&value.*.name);
             }
             result.value_ptr.update_station(value);
         }
     }
 
     try print_results(gpa, &result_stations);
+
+    for (workers) |worker| {
+        worker.deinit(gpa);
+    }
 }
 
-fn process_chunk(buffer: []u8, buffer_size: usize, stations: *std.StringHashMap(StationSummary)) !void {
+fn process_chunk(buffer: []u8, buffer_size: usize, stations: *std.StringHashMap(StationSummary), stations_keys: *std.ArrayList([]const u8)) !void {
     var current_pos: usize = 0;
     var temp: i32 = 0;
     var is_negative: bool = false;
@@ -191,6 +213,8 @@ fn process_chunk(buffer: []u8, buffer_size: usize, stations: *std.StringHashMap(
             }
 
             const station_name = buffer[start_of_line .. start_of_line + station_name_length];
+
+            std.mem.copyForwards(u8, @ptrCast(&result.name), name_);
             const result = try stations.getOrPut(station_name);
             if (!result.found_existing) {
                 result.value_ptr.* = StationSummary.init(station_name);
