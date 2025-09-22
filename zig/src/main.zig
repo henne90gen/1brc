@@ -2,6 +2,7 @@ const std = @import("std");
 
 const multi_threaded = true;
 const use_debug_allocator = true;
+const maximum_buffer_capacity: usize = 128 * 1024 * 1024;
 // const measurements_file_path = "/home/henne/Workspace/1brc/measurements-100M.txt";
 const measurements_file_path = "/home/henne/Workspace/1brc/measurements-1B.txt";
 // const measurements_file_path = "D:\\Workspace\\1brc\\measurements-1B.txt";
@@ -79,11 +80,7 @@ const Worker = struct {
                 continue;
             }
 
-            //std.debug.print("processing chunk\n", .{});
-
             process_chunk(self.buffer, self.buffer_size, &self.stations, self.allocator) catch {};
-
-            //std.debug.print("done processing chunk\n", .{});
 
             self.processing.store(false, .monotonic);
         }
@@ -108,8 +105,6 @@ fn process_chunk(buffer: []u8, buffer_size: usize, stations: *StationSummaryHash
             }
 
             const station_name = buffer[start_of_line .. start_of_line + station_name_length];
-
-            // //std.debug.print("Found station {s} at offset {}\n", .{station_name, start_of_line});
 
             var result = try stations.getOrPutAdapted(station_name, stations.ctx);
             if (!result.found_existing) {
@@ -159,7 +154,7 @@ pub fn main() !void {
             switch (result) {
                 .ok => {},
                 .leak => {
-                    //std.debug.print("Memory leak detected\n", .{});
+                    std.debug.print("Memory leak detected\n", .{});
                 },
             }
         }
@@ -181,15 +176,12 @@ pub fn main() !void {
     const worker_arenas: []std.heap.ArenaAllocator = try gpa.alloc(std.heap.ArenaAllocator, parallel_executions);
     defer gpa.free(worker_arenas);
 
-    const maximum_buffer_capacity: usize = 128 * 1024 * 1024;
     const buffer_capacity = @min(maximum_buffer_capacity, try file.getEndPos() / parallel_executions);
 
     for (0..workers.len) |idx| {
         worker_arenas[idx] = std.heap.ArenaAllocator.init(gpa);
         workers[idx] = try Worker.init(worker_arenas[idx].allocator(), idx, buffer_capacity);
     }
-
-    //std.debug.print("created workers\n", .{});
 
     var copy_from_previous: usize = 0;
     var previous_buffer: []u8 = undefined;
@@ -206,10 +198,7 @@ pub fn main() !void {
             }
         }
 
-        //std.debug.print("selected worker, dispatching work\n", .{});
-
         if (copy_from_previous != 0) {
-            //std.debug.print("copying work from previous buffer: {}\n", .{copy_from_previous});
             std.mem.copyForwards(u8, selected_worker.?.buffer, previous_buffer[previous_buffer_size - copy_from_previous .. previous_buffer_size]);
         }
 
@@ -217,7 +206,6 @@ pub fn main() !void {
         const bytes_read = try file.read(selected_worker.?.buffer[copy_from_previous..]);
         total_bytes_read += bytes_read;
         if (bytes_read != expected_bytes_read and total_bytes_read < try file.getEndPos()) {
-            //std.debug.print("did not read the expected amount of bytes: {} vs {}\n", .{ bytes_read, expected_bytes_read });
             for (workers) |worker| {
                 worker.done.store(true, .monotonic);
             }
@@ -226,12 +214,9 @@ pub fn main() !void {
 
         selected_worker.?.buffer_size = bytes_read + copy_from_previous;
 
-        //std.debug.print("starting selected worker: from_previous={}, bytes_read={}, buffer_size={}, buffer_capacity={}\n", .{ copy_from_previous, bytes_read, selected_worker.?.buffer_size, selected_worker.?.buffer_capacity });
-
         selected_worker.?.processing.store(true, .monotonic);
 
         if (total_bytes_read >= try file.getEndPos()) {
-            //std.debug.print("done reading file\n", .{});
             break;
         }
 
