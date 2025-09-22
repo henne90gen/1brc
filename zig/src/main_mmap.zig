@@ -4,8 +4,8 @@ const builtin = @import("builtin");
 const multi_threaded = true;
 const use_debug_allocator = true;
 // const measurements_file_path = "/home/henne/Workspace/1brc/measurements-10M.txt";
-// const measurements_file_path = "/home/henne/Workspace/1brc/measurements-1B.txt";
-const measurements_file_path = "D:\\Workspace\\1brc\\measurements-1B.txt";
+const measurements_file_path = "/home/henne/Workspace/1brc/measurements-1B.txt";
+// const measurements_file_path = "D:\\Workspace\\1brc\\measurements-1B.txt";
 
 const StationSummary = struct {
     name: []const u8,

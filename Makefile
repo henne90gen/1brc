@@ -15,14 +15,17 @@ cpp-perf: cpp-build
 zig-build:
 	cd zig && zig build -Doptimize=ReleaseFast
 
-zig-run-mmap: zig-build
-	cd zig && time ./zig-out/bin/brc_mmap > ../solution_zig.txt
-
 zig-run: zig-build
 	cd zig && time ./zig-out/bin/brc > ../solution_zig.txt
 
-zig-perf: zig-build
+zig-run-mmap: zig-build
+	cd zig && time ./zig-out/bin/brc_mmap > ../solution_zig.txt
+
+zig-perf-mmap: zig-build
 	cd zig && perf record --call-graph dwarf ./zig-out/bin/brc_mmap
 
+zig-perf: zig-build
+	cd zig && perf record --call-graph dwarf ./zig-out/bin/brc
+
 bench: cpp-build zig-build
-	hyperfine --warmup 3 './zig/zig-out/bin/brc_mmap' './cpp/brc'
+	hyperfine --warmup 3 './zig/zig-out/bin/brc' './zig/zig-out/bin/brc_mmap' './cpp/brc'

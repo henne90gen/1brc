@@ -3,19 +3,18 @@ const std = @import("std");
 const multi_threaded = true;
 const use_debug_allocator = true;
 // const measurements_file_path = "/home/henne/Workspace/1brc/measurements-100M.txt";
-// const measurements_file_path = "/home/henne/Workspace/1brc/measurements-10M.txt";
-const measurements_file_path = "D:\\Workspace\\1brc\\measurements-1B.txt";
+const measurements_file_path = "/home/henne/Workspace/1brc/measurements-1B.txt";
+// const measurements_file_path = "D:\\Workspace\\1brc\\measurements-1B.txt";
 
 const StationSummary = struct {
-    name: [100]u8,
+    name: []const u8,
     min: i32 = 1000,
     max: i32 = -1000,
     sum: i64 = 0,
     count: i32 = 0,
 
-    pub fn init(name_: []const u8) StationSummary {
-        var result = StationSummary{ .name = undefined };
-        return result;
+    pub fn init(name: []const u8) StationSummary {
+        return StationSummary{ .name = name };
     }
 
     pub fn update_temp(self: *StationSummary, temp: i32) void {
@@ -47,32 +46,31 @@ const StationSummary = struct {
     }
 };
 
+const StationSummaryHashMap = std.StringHashMap(StationSummary);
+
 const Worker = struct {
+    allocator: std.mem.Allocator,
     thread: std.Thread,
     buffer: []u8,
     buffer_size: usize,
     buffer_capacity: usize,
-    stations: std.StringHashMap(StationSummary) = undefined,
-    stations_keys: std.ArrayList([]const u8) = undefined,
+    stations: StationSummaryHashMap = undefined,
 
     processing: std.atomic.Value(bool) = std.atomic.Value(bool).init(false),
     done: std.atomic.Value(bool) = std.atomic.Value(bool).init(false),
 
-    pub fn init(gpa: std.mem.Allocator) !*Worker {
-        const buffer_capacity = 256 * 1024 * 1024;
-        var result = try gpa.create(Worker);
+    pub fn init(allocator: std.mem.Allocator, idx: usize, buffer_capacity: usize) !*Worker {
+        var result = try allocator.create(Worker);
+        result.allocator = allocator;
         result.buffer_capacity = buffer_capacity;
-        result.buffer = try gpa.alloc(u8, buffer_capacity);
-        result.stations = std.StringHashMap(StationSummary).init(gpa);
-        result.stations_keys = std.ArrayList([]const u8).init(gpa);
+        result.buffer = try allocator.alloc(u8, buffer_capacity);
+        result.stations = StationSummaryHashMap.init(allocator);
         result.thread = try std.Thread.spawn(.{}, Worker.run, .{result});
-        return result;
-    }
 
-    pub fn deinit(self: *Worker, gpa: std.mem.Allocator) void {
-        gpa.free(self.buffer);
-        self.stations.deinit();
-        gpa.destroy(self);
+        const thread_name = try std.fmt.allocPrint(allocator, "Worker-{}", .{idx});
+        try result.thread.setName(thread_name);
+
+        return result;
     }
 
     pub fn run(self: *Worker) void {
@@ -81,121 +79,18 @@ const Worker = struct {
                 continue;
             }
 
-            process_chunk(self.buffer, self.buffer_size, &self.stations) catch {};
+            //std.debug.print("processing chunk\n", .{});
+
+            process_chunk(self.buffer, self.buffer_size, &self.stations, self.allocator) catch {};
+
+            //std.debug.print("done processing chunk\n", .{});
 
             self.processing.store(false, .monotonic);
         }
     }
 };
 
-pub fn main() !void {
-    var debug_allocator = std.heap.DebugAllocator(.{}).init;
-    defer {
-        if (comptime use_debug_allocator) {
-            const result = debug_allocator.deinit();
-            switch (result) {
-                .ok => {},
-                .leak => {
-                    std.debug.print("Memory leak detected\n", .{});
-                },
-            }
-        }
-    }
-
-    var gpa: std.mem.Allocator = undefined;
-    if (comptime use_debug_allocator) {
-        gpa = debug_allocator.allocator();
-    } else {
-        gpa = std.heap.page_allocator;
-    }
-
-    const file = try std.fs.openFileAbsolute(measurements_file_path, .{});
-    defer file.close();
-
-    const parallel_executions = if (multi_threaded) try std.Thread.getCpuCount() else 1;
-    const workers: []*Worker = try gpa.alloc(*Worker, parallel_executions);
-    defer gpa.free(workers);
-
-    for (workers) |*worker| {
-        worker.* = try Worker.init(gpa);
-    }
-
-    std.debug.print("created workers\n", .{});
-
-    var copy_from_previous: usize = 0;
-    var previous_buffer: []u8 = undefined;
-    var previous_buffer_size: usize = 0;
-    while (true) {
-        var selected_worker: ?*Worker = null;
-        while (selected_worker == null) {
-            for (workers) |worker| {
-                if (!worker.processing.load(.monotonic)) {
-                    selected_worker = worker;
-                    break;
-                }
-            }
-        }
-
-        std.debug.print("selected worker, dispatching work\n", .{});
-
-        if (copy_from_previous != 0) {
-            std.debug.print("copying work from previous buffer: {}\n", .{copy_from_previous});
-            std.mem.copyForwards(u8, selected_worker.?.buffer, previous_buffer[previous_buffer_size - copy_from_previous .. previous_buffer_size]);
-        }
-
-        const expected_bytes_read = selected_worker.?.buffer_capacity - copy_from_previous;
-        const bytes_read = try file.read(selected_worker.?.buffer[copy_from_previous..]);
-        if (bytes_read != expected_bytes_read) {
-            std.debug.print("did not read the expected amount of bytes: {} vs {}\n", .{ bytes_read, expected_bytes_read });
-            for (workers) |worker| {
-                worker.done.store(true, .monotonic);
-            }
-            break;
-        }
-
-        selected_worker.?.buffer_size = bytes_read + copy_from_previous;
-
-        std.debug.print("starting selected worker: from_previous={}, bytes_read={}, buffer_size={}, buffer_capacity={}\n", .{ copy_from_previous, bytes_read, selected_worker.?.buffer_size, selected_worker.?.buffer_capacity });
-
-        selected_worker.?.processing.store(true, .monotonic);
-
-        var last_line_break: usize = selected_worker.?.buffer_size - 1;
-        while (last_line_break > 0) : (last_line_break -= 1) {
-            if (selected_worker.?.buffer[last_line_break] == '\n') {
-                break;
-            }
-        }
-
-        previous_buffer = selected_worker.?.buffer;
-        previous_buffer_size = selected_worker.?.buffer_size;
-        copy_from_previous = selected_worker.?.buffer_size - last_line_break - 1;
-    }
-
-    for (workers) |worker| {
-        worker.thread.join();
-    }
-
-    var result_stations = std.StringHashMap(StationSummary).init(gpa);
-    defer result_stations.deinit();
-    for (workers) |worker| {
-        var itr = worker.stations.valueIterator();
-        while (itr.next()) |value| {
-            const result = try result_stations.getOrPut(&value.*.name);
-            if (!result.found_existing) {
-                result.value_ptr.* = StationSummary.init(&value.*.name);
-            }
-            result.value_ptr.update_station(value);
-        }
-    }
-
-    try print_results(gpa, &result_stations);
-
-    for (workers) |worker| {
-        worker.deinit(gpa);
-    }
-}
-
-fn process_chunk(buffer: []u8, buffer_size: usize, stations: *std.StringHashMap(StationSummary), stations_keys: *std.ArrayList([]const u8)) !void {
+fn process_chunk(buffer: []u8, buffer_size: usize, stations: *StationSummaryHashMap, gpa: std.mem.Allocator) !void {
     var current_pos: usize = 0;
     var temp: i32 = 0;
     var is_negative: bool = false;
@@ -214,11 +109,16 @@ fn process_chunk(buffer: []u8, buffer_size: usize, stations: *std.StringHashMap(
 
             const station_name = buffer[start_of_line .. start_of_line + station_name_length];
 
-            std.mem.copyForwards(u8, @ptrCast(&result.name), name_);
-            const result = try stations.getOrPut(station_name);
+            // //std.debug.print("Found station {s} at offset {}\n", .{station_name, start_of_line});
+
+            var result = try stations.getOrPutAdapted(station_name, stations.ctx);
             if (!result.found_existing) {
-                result.value_ptr.* = StationSummary.init(station_name);
+                const station_name_copy = try gpa.alloc(u8, station_name_length);
+                @memcpy(station_name_copy, station_name);
+                result.value_ptr.* = StationSummary.init(station_name_copy);
+                result.key_ptr.* = result.value_ptr.*.name;
             }
+
             result.value_ptr.update_temp(temp);
 
             temp = 0;
@@ -251,11 +151,135 @@ fn process_chunk(buffer: []u8, buffer_size: usize, stations: *std.StringHashMap(
     }
 }
 
+pub fn main() !void {
+    var debug_allocator = std.heap.DebugAllocator(.{}).init;
+    defer {
+        if (comptime use_debug_allocator) {
+            const result = debug_allocator.deinit();
+            switch (result) {
+                .ok => {},
+                .leak => {
+                    //std.debug.print("Memory leak detected\n", .{});
+                },
+            }
+        }
+    }
+
+    var gpa: std.mem.Allocator = undefined;
+    if (comptime use_debug_allocator) {
+        gpa = debug_allocator.allocator();
+    } else {
+        gpa = std.heap.page_allocator;
+    }
+
+    const file = try std.fs.openFileAbsolute(measurements_file_path, .{});
+    defer file.close();
+
+    const parallel_executions = if (multi_threaded) try std.Thread.getCpuCount() else 1;
+    const workers: []*Worker = try gpa.alloc(*Worker, parallel_executions);
+    defer gpa.free(workers);
+    const worker_arenas: []std.heap.ArenaAllocator = try gpa.alloc(std.heap.ArenaAllocator, parallel_executions);
+    defer gpa.free(worker_arenas);
+
+    const maximum_buffer_capacity: usize = 128 * 1024 * 1024;
+    const buffer_capacity = @min(maximum_buffer_capacity, try file.getEndPos() / parallel_executions);
+
+    for (0..workers.len) |idx| {
+        worker_arenas[idx] = std.heap.ArenaAllocator.init(gpa);
+        workers[idx] = try Worker.init(worker_arenas[idx].allocator(), idx, buffer_capacity);
+    }
+
+    //std.debug.print("created workers\n", .{});
+
+    var copy_from_previous: usize = 0;
+    var previous_buffer: []u8 = undefined;
+    var previous_buffer_size: usize = 0;
+    var total_bytes_read: usize = 0;
+    while (true) {
+        var selected_worker: ?*Worker = null;
+        while (selected_worker == null) {
+            for (workers) |worker| {
+                if (!worker.processing.load(.monotonic)) {
+                    selected_worker = worker;
+                    break;
+                }
+            }
+        }
+
+        //std.debug.print("selected worker, dispatching work\n", .{});
+
+        if (copy_from_previous != 0) {
+            //std.debug.print("copying work from previous buffer: {}\n", .{copy_from_previous});
+            std.mem.copyForwards(u8, selected_worker.?.buffer, previous_buffer[previous_buffer_size - copy_from_previous .. previous_buffer_size]);
+        }
+
+        const expected_bytes_read = selected_worker.?.buffer_capacity - copy_from_previous;
+        const bytes_read = try file.read(selected_worker.?.buffer[copy_from_previous..]);
+        total_bytes_read += bytes_read;
+        if (bytes_read != expected_bytes_read and total_bytes_read < try file.getEndPos()) {
+            //std.debug.print("did not read the expected amount of bytes: {} vs {}\n", .{ bytes_read, expected_bytes_read });
+            for (workers) |worker| {
+                worker.done.store(true, .monotonic);
+            }
+            break;
+        }
+
+        selected_worker.?.buffer_size = bytes_read + copy_from_previous;
+
+        //std.debug.print("starting selected worker: from_previous={}, bytes_read={}, buffer_size={}, buffer_capacity={}\n", .{ copy_from_previous, bytes_read, selected_worker.?.buffer_size, selected_worker.?.buffer_capacity });
+
+        selected_worker.?.processing.store(true, .monotonic);
+
+        if (total_bytes_read >= try file.getEndPos()) {
+            //std.debug.print("done reading file\n", .{});
+            break;
+        }
+
+        var last_line_break: usize = selected_worker.?.buffer_size - 1;
+        while (last_line_break > 0) : (last_line_break -= 1) {
+            if (selected_worker.?.buffer[last_line_break] == '\n') {
+                break;
+            }
+        }
+
+        previous_buffer = selected_worker.?.buffer;
+        previous_buffer_size = selected_worker.?.buffer_size;
+        copy_from_previous = selected_worker.?.buffer_size - last_line_break - 1;
+    }
+
+    for (workers) |worker| {
+        worker.done.store(true, .monotonic);
+    }
+
+    for (workers) |worker| {
+        worker.thread.join();
+    }
+
+    var result_stations = StationSummaryHashMap.init(gpa);
+    defer result_stations.deinit();
+    for (workers) |worker| {
+        var itr = worker.stations.valueIterator();
+        while (itr.next()) |value| {
+            const result = try result_stations.getOrPut(value.*.name);
+            if (!result.found_existing) {
+                result.value_ptr.* = StationSummary.init(value.*.name);
+            }
+            result.value_ptr.update_station(value);
+        }
+    }
+
+    try print_results(gpa, &result_stations);
+
+    for (worker_arenas) |arena| {
+        arena.deinit();
+    }
+}
+
 fn compareStrings(_: void, lhs: []const u8, rhs: []const u8) bool {
     return std.mem.order(u8, lhs, rhs).compare(std.math.CompareOperator.lt);
 }
 
-fn print_results(gpa: std.mem.Allocator, stations: *std.StringHashMap(StationSummary)) !void {
+fn print_results(gpa: std.mem.Allocator, stations: *StationSummaryHashMap) !void {
     var keys = try std.ArrayList([]const u8).initCapacity(gpa, stations.count());
     defer keys.deinit(gpa);
 
@@ -288,9 +312,3 @@ fn print_results(gpa: std.mem.Allocator, stations: *std.StringHashMap(StationSum
 
     try stdout.interface.print("}}\n", .{});
 }
-
-// read chunks of data (~256MB)
-// dispatch chunk to worker thread
-// read from the end of the chunk, to find the last line break
-// copy the end of the chunk after the last line break to the next buffer
-// continue reading into the next buffer

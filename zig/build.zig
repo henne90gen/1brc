@@ -9,7 +9,6 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
-
     const exe_mmap = b.addExecutable(.{
         .name = "brc_mmap",
         .root_module = exe_mmap_mod,
@@ -28,7 +27,6 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
-
     const exe = b.addExecutable(.{
         .name = "brc",
         .root_module = exe_mod,
